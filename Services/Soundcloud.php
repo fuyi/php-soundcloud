@@ -182,6 +182,15 @@ class Services_Soundcloud
     private $_requestFormat;
 
     /**
+     * Persistance access token between separate execution
+     *
+     * @var boolean
+     *
+     * @access private
+     */
+    private $_persistance = false;
+
+    /**
      * Available response formats
      *
      * @var array
@@ -205,6 +214,7 @@ class Services_Soundcloud
      */
     private static $_userAgent = 'PHP-SoundCloud';
 
+
     /**
      * Class constructor
      *
@@ -218,7 +228,7 @@ class Services_Soundcloud
      *
      * @access public
      */
-    function __construct($clientId, $clientSecret, $redirectUri = null, $development = false)
+    function __construct($clientId, $clientSecret, $redirectUri = null, $development = false,$persistance = false)
     {
         if (empty($clientId)) {
             throw new Services_Soundcloud_Missing_Client_Id_Exception();
@@ -229,8 +239,13 @@ class Services_Soundcloud
         $this->_redirectUri = $redirectUri;
         $this->_development = $development;
         $this->_responseFormat = self::$_responseFormats['json'];
+        $this->_persistance = $persistance;
         $this->_curlOptions = self::$_curlDefaultOptions;
         $this->_curlOptions[CURLOPT_USERAGENT] .= $this->_getUserAgent();
+
+        // read access token from session if persistance is true
+        if($this->_persistance && isset($_SESSION['sc_access_token']))
+            $this->setAccessToken($_SESSION['sc_access_token']);
     }
 
     /**
@@ -615,6 +630,7 @@ class Services_Soundcloud
     function post($path, $postData = array(), $curlOptions = array())
     {
         $url = $this->_buildUrl($path);
+        debug($url);
         $options = array(CURLOPT_POST => true, CURLOPT_POSTFIELDS => $postData);
         $options += $curlOptions;
 
@@ -819,7 +835,10 @@ class Services_Soundcloud
 
         if (array_key_exists('access_token', $response)) {
             $this->_accessToken = $response['access_token'];
-
+            if($this->_persistance)
+            {
+                $_SESSION['sc_access_token'] = $this->_accessToken;
+            }
             return $response;
         } else {
             return false;
@@ -938,6 +957,8 @@ class Services_Soundcloud
         if ($this->_validResponseCode($this->_lastHttpResponseCode)) {
             return $this->_lastHttpResponseBody;
         } else {
+            //cleanup access token in session
+            if(isset($_SESSION['sc_access_token'])) unset($_SESSION['sc_access_token']);
             throw new Services_Soundcloud_Invalid_Http_Response_Code_Exception(
                 null,
                 0,
